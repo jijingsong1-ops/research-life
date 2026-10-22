@@ -168,3 +168,29 @@ test('fractional timeline counters and future project starts cannot enter a play
   const valid = G.make('ee', 2); valid.funds = 12.5;
   assert.doesNotThrow(() => ui.validate(valid), 'fractional financial amounts remain valid');
 });
+
+test('current attributes appear across pages and in dialogs after actions',()=>{
+  const ui=harness(),s=G.make('cs',9);ui.setState(s);
+  for(const page of ['overview','papers','journal','guide']){
+    ui.call(`page='${page}';render()`);assert.ok(ui.elements.get('#app').innerHTML.includes('aria-label="当前六项指标"'));
+  }
+  ui.call("run(()=>G.act(state,'read'))");const html=ui.call('statusRibbon()');assert.ok(html.includes('<strong>70<small>/100'));
+  ui.call('storageDialog()');assert.ok(ui.elements.get('#modal').innerHTML.includes('dialog-status-wrap'));
+});
+test('backlog import rejects corrupt records but supports earlier saves',()=>{
+  const ui=harness(),s=G.make('lit',4);s.pending=true;s.queue=['c6'];G.resolve(s,-1);
+  assert.doesNotThrow(()=>ui.validate(clone(s)));
+  for(const corrupt of [b=>b.createdTick=999,b=>b.id='cs5',b=>b.from=null,b=>b.projectNumber=999]){
+    const bad=clone(s);corrupt(bad.backlog[0]);assert.throws(()=>ui.validate(bad));
+  }
+  const old=G.make('cs',1);delete old.backlog;assert.equal(ui.validate(old).backlog.length,0);
+});
+test('UI follows up a carried issue and updates saved resources immediately',()=>{
+  const s=G.make('lit',4);s.pending=true;s.queue=['c6'];G.resolve(s,-1);s.ui={seenRound:s.lastRound.id};
+  const ui=harness(s);assert.ok(ui.call('backlogPanel()').includes('报销材料被退回'));
+  ui.click({backlog:'c6'});assert.equal(ui.call('modalKind'),'backlog');
+  const before=ui.call('state.actions');ui.click({followup:'c6',option:'0'});
+  assert.equal(ui.call('state.actions'),before-1);assert.equal(ui.call('state.backlog.length'),0);
+  assert.equal(JSON.parse(ui.storage.get('research-life-save-v1')).backlog.length,0);
+  assert.ok(!ui.elements.get('#modal').open);
+});

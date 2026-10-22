@@ -20,6 +20,7 @@
     if (!Object.hasOwn(s, 'focus')) s.focus = 'balanced';
     if (!Object.hasOwn(s, 'lastRound')) s.lastRound = null;
     if (!Object.hasOwn(s, 'opportunityHistory')) s.opportunityHistory = [];
+    if (!Object.hasOwn(s, 'backlog')) s.backlog = [];
     if (!s.roundStart) beginRound(s);
     return s;
   }
@@ -81,6 +82,7 @@
       { id: 'research', title: m.research, text: `推进「${topic(s)}」。`, icon: m.icon, effects: { energy: -m.energy, funds: -m.cost * (faculty ? 1.5 : 1), health: -m.health, knowledge: s.major === 'math' ? 5 : 3, progress: (faculty ? 2 : 1) + (s.knowledge >= 65 ? 1 : 0) }, disabled: s.project.progress >= m.work ? '研究量已足，需等待研究周期完成' : '' },
       { id: 'mentor', title: faculty ? '同行交流' : '导师讨论', text: faculty ? '和国内同行讨论研究边界与合作分工。' : '带着具体问题讨论方向，争取有效指导。', icon: 'chat', effects: { energy: -10, advisor: 8, knowledge: 4, eq: 4, health: -1 } },
       { id: 'rest', title: '认真休息', text: '把一段完整的时间留给睡眠、散步与生活。', icon: 'leaf', effects: { energy: 26, health: 16 }, note: '占用 1 次行动，研究暂缓' },
+      { id: 'integrity', title: '核对与补正材料', text: '核对引注、署名和原始记录，补充说明；有问题的稿件重新整理。', icon: 'shield', effects: { energy: -12, knowledge: 3, ethics: 10, risk: -18 }, disabled: s.risk <= 0 && s.ethics >= 85 && !s.papers.some(p => p.evidenceRisk > 0 || p.status === 'withdrawn') ? '暂无需要补正的规范问题' : '', note: '占用 1 次行动，逐步降低后续核查风险' },
       { id: 'grant', title: faculty ? '申报研究项目' : '参与课题申报', text: `${projectTitle(s)}${faculty ? '' : '的前期材料与校内研究生创新项目'}。`, icon: 'folder', effects: { energy: -17, health: -3, knowledge: 3 }, disabled: s.annual.grant ? '本回合已申报' : '', note: '竞争评审 · 可能不获资助' },
       ...(faculty ? [
         { id: 'teach', title: '备课与教学', text: '完成课程教学、作业反馈与课堂改进。每年需至少 1 次。', icon: 'board', effects: { energy: -18, health: -3, teaching: 1, reputation: 2 }, note: s.annual.teach ? '本年度已完成基础教学' : '年度责任' },
@@ -121,6 +123,7 @@
     const can = id => actions.some(a => a.id === id && !a.disabled && !affordability(s, a.effects));
     const suggestion = (id, reason) => ({ id, title: actions.find(a => a.id === id).title, reason });
     if (s.health < 43 || s.energy < 23) return suggestion('rest', '先恢复精力与健康，给接下来的研究和期末事件留出余量。');
+    if (s.risk >= 45 && can('integrity')) return suggestion('integrity', '前期材料需要集中核对。花一次行动补正，可以降低后续返工风险。');
     for (const [id, reason] of [['defense', '毕业条件已经具备，先完成答辩，避免无谓延长培养。'], ['blind', '论文与培养条件已经达到，尽早送盲审，为可能的修改留出时间。'], ['proposal', '可以开题了。通过之后，学位论文写作就会开放。']]) {
       if (can(id)) return suggestion(id, reason);
     }
@@ -223,6 +226,14 @@
     s.actions--; apply(s, a.effects); s.annual[id] = (s.annual[id] || 0) + 1;
     if (id === 'research') s.researchRuns++;
     let result = a.note ? `${a.note}（${costs(a.effects)}）` : costs(a.effects);
+    if (id === 'integrity') {
+      const p = s.papers.find(p => p.status === 'withdrawn') || s.papers.find(p => p.evidenceRisk > 0);
+      if (p) {
+        p.evidenceRisk = Math.max(0, p.evidenceRisk - 18);
+        if (p.status === 'withdrawn') { p.status = 'draft'; p.quality = p.quality.map(q => Math.max(0, q - 8)); p.feedback = '已撤下问题表述并整理材料，需重新投稿和接受评审。'; }
+      }
+      result = '已核对来源、贡献和记录，补充材料说明。规范风险降低；撤回稿可重新整理投稿，过去的记录仍保留在手记中。';
+    }
     if (id === 'proposal') { s.proposal = true; result = '开题通过。方向仍可调整，但学位论文终于有了清晰的问题。'; }
     if (id === 'chapter') {
       s.chapterWork = (s.chapterWork || 0) + 1;
@@ -252,7 +263,7 @@
       } else result = '本轮未获资助。评审认为前期基础与研究设计还需要加强，申请书积累保留。';
     }
     if (id === 'blind') {
-      if (s.ethics < 55 && random(s) < .5) { s.thesis = 75; result = '规范核查要求补充来源与材料说明。退回修改，完成后下学期再送审。'; }
+      if (s.ethics < 30 && s.risk >= 60 && random(s) < .2) { s.thesis = 85; result = '规范核查要求补充来源与材料说明。退回修改，完成后下学期再送审。'; }
       else if (random(s) < clamp(.72 + (s.knowledge - 55) * .006, .65, .95)) { s.blind = true; result = '同行评议通过。请整理答辩材料，第 8 学期起可申请毕业答辩。'; }
       else { s.thesis = 75; result = '盲审要求修改论证与材料。论文完成度回退至 75，下学期可再次送审。'; }
     }
@@ -260,10 +271,10 @@
     log(s, a.title, result, id === 'rest' ? 'life' : 'normal'); manuscript(s); checkHealth(s); return '';
   }
   const strategies = {
-    honest: { name: '规范写作与适度润色', desc: '澄清表达、核对引注，不改变事实与贡献边界。', effects: { energy: -14 }, quality: 4 },
-    hype: { name: '过度拔高研究贡献', desc: '短期提升稿件观感，增加被质疑及追责的风险。', effects: { energy: -8, ethics: -16, risk: 14 }, quality: 8 },
-    padding: { name: '观点注水 / 恶意蹭热点', desc: '用未经论证的概括填充文章，留下质量与规范隐患。', effects: { energy: -6, ethics: -20, risk: 18 }, quality: 6 },
-    fraud: { name: '伪造数据 / 编造论证', desc: '短期包装效果明显，调查成立后本局科研道路终止。', effects: { energy: -4, ethics: -38, risk: 38 }, quality: 17 }
+    honest: { name: '规范写作与适度润色', desc: '澄清表达、核对引注，不改变事实与贡献边界，并逐步补正前期问题。', effects: { energy: -14, ethics: 3, risk: -3 }, quality: 4 },
+    hype: { name: '过度拔高研究贡献', desc: '短期改善稿件观感，后续可能需要解释、收缩结论。', effects: { energy: -8, ethics: -8, risk: 8 }, quality: 8 },
+    padding: { name: '观点注水 / 恶意蹭热点', desc: '节省眼前精力，但可能增加核查、重写与声望损失。', effects: { energy: -6, ethics: -12, risk: 12 }, quality: 6 },
+    fraud: { name: '伪造数据 / 编造论证', desc: '留下较高核查风险，问题稿件可能撤回重做。本局不会因此直接终止，仍需付出补正成本。', effects: { energy: -4, ethics: -24, risk: 24 }, quality: 17 }
   };
   function submit(s, id, tier, strategy) {
     if (!available(s)) return '请先完成当前事件';
@@ -271,7 +282,7 @@
     const p = s.papers.find(p => p.id === id), st = strategies[strategy];
     if (!p || !['draft', 'rejected'].includes(p.status) || !st || !Number.isInteger(tier) || tier < 0 || tier > 2) return '当前稿件无法投稿';
     const lack = affordability(s, st.effects); if (lack) return lack;
-    s.actions--; apply(s, st.effects); p.tier = p.kind === 'chapter' ? 1 : tier; p.strategy = strategy; p.evidenceRisk += Math.max(0, st.effects.risk || 0);
+    s.actions--; apply(s, st.effects); p.tier = p.kind === 'chapter' ? 1 : tier; p.strategy = strategy; p.evidenceRisk = Math.max(0, p.evidenceRisk + (st.effects.risk || 0));
     p.quality = p.quality.map(q => clamp(q + st.quality, 0, 98));
     p.status = 'review'; p.due = s.tick + (p.kind === 'chapter' ? 2 : D.majors[s.major].review[tier]); p.rounds++;
     log(s, '稿件已送出', `《${p.title}》投往${venue(s,p)}。预计 ${p.due - s.tick} 个回合后收到意见。`, 'paper'); checkHealth(s); return '';
@@ -284,23 +295,52 @@
     log(s, '逐条回复审稿意见', `《${p.title}》已提交返修，下一回合等待复审。返修不保证录用，原有规范风险也不会被自动抹去。`, 'paper'); checkHealth(s); return '';
   }
   function pick(s, pool) {
-    let candidates = pool.filter(e => !s.usedEvents.includes(e.id));
-    if (!candidates.length) { s.usedEvents = s.usedEvents.filter(id => !pool.some(e => e.id === id)); candidates = pool; }
+    const open = new Set(s.backlog.map(item => item.id));
+    const eligible = pool.filter(e => !open.has(e.id));
+    if (!eligible.length) return null;
+    let candidates = eligible.filter(e => !s.usedEvents.includes(e.id));
+    if (!candidates.length) { s.usedEvents = s.usedEvents.filter(id => !eligible.some(e => e.id === id)); candidates = eligible; }
     const e = candidates[Math.floor(random(s) * candidates.length)]; s.usedEvents.push(e.id); return e.id;
   }
   function eventById(id) { return [...D.common, ...Object.values(D.special).flat()].find(e => e.id === id); }
+  // Deadlines close with their round; research and administrative problems can persist.
+  function deferral(id) {
+    const timed = ['c1', 'c2', 'c5', 'c8', 'cs1', 'cs6', 'ee1', 'ee3', 'ee6', 'mx1', 'ne6'];
+    return timed.includes(id)
+      ? { carry: false, label: '放弃本轮窗口，调整安排', effects: { advisor: -2, progress: -1 }, note: '本次会议、任务或档期有明确时限，错过后不会保留原机会。已有研究和稿件仍然保留。' }
+      : { carry: true, label: '留到下期继续处理', effects: { health: -2, advisor: -1 }, note: '问题会进入下期待办；处理占用 1 次行动。继续搁置每期带来健康与关系压力，也可主动结束跟进。' };
+  }
+  function backlogEffects(s, item, index) {
+    const e = index === -1 ? { advisor: -2, progress: -1 } : { ...eventById(item.id).choices[index]?.effects };
+    if (item.projectNumber !== s.project.number) delete e.progress;
+    return e;
+  }
+  function resolveBacklog(s, id, index) {
+    if (!available(s) || s.actions < 1) return '需要剩余行动，且先完成当前事件';
+    const item = s.backlog.find(item => item.id === id);
+    if (!item || item.createdTick >= s.tick) return '这件事将在下一期开放处理';
+    const ev = eventById(id), c = ev.choices[index];
+    if (index !== -1 && !c) return '未知选项';
+    const effects = backlogEffects(s, item, index), lack = affordability(s, effects); if (lack) return lack;
+    s.actions--; s.annual.followup = (s.annual.followup || 0) + 1; apply(s, effects);
+    s.backlog = s.backlog.filter(b => b.id !== id);
+    log(s, `跟进完成：${ev.title}`, `来自${item.from}。${index === -1 ? '说明情况，结束这项跟进，接受协调与研究取舍。' : `${c.text}。${c.note}`}（占用 1 次行动；${costs(effects)}）${item.projectNumber !== s.project.number ? '这是此前研究的遗留问题，不改变当前课题进度。' : ''}`, 'event');
+    manuscript(s); checkHealth(s); return '';
+  }
   function next(s) {
     if (!available(s)) return '请先完成当前事件';
     s.pending = true;
-    s.queue = [pick(s, D.common), pick(s, D.special[s.major])];
+    s.queue = [pick(s, D.common), pick(s, D.special[s.major])].filter(Boolean);
+    if (!s.queue.length) finish(s);
     return '';
   }
   function resolve(s, index) {
     if (!s.pending || !s.queue.length) return '没有待处理事件';
     const ev = eventById(s.queue[0]);
     if (index === -1) {
-      apply(s, { health: -4, advisor: -4, progress: -1 });
-      log(s, ev.title, '你暂不接受现有安排，选择延期协调：健康 -4、导师好感 -4、研究进度 -1。', 'event');
+      const d = deferral(ev.id); apply(s, d.effects);
+      if (d.carry && !s.backlog.some(item => item.id === ev.id)) s.backlog.push({ id: ev.id, from: time(s), createdTick: s.tick, projectNumber: s.project.number, topic: topic(s) });
+      log(s, ev.title, `${d.label}。${d.note}（${costs(d.effects)}）`, 'event');
     } else {
       const c = ev.choices[index]; if (!c) return '未知选项'; const lack = affordability(s,c.effects); if (lack) return lack;
       apply(s,c.effects); log(s, ev.title, `${c.text}。${c.note}（${costs(c.effects)}）`, 'event');
@@ -325,13 +365,19 @@
   }
   function finish(s) {
     manuscript(s);
-    if (s.risk > 0 && random(s) < Math.min(.8, s.risk / 160)) {
-      if (s.ethics < 45 || s.risk >= 60) { end(s, 'blacklist'); recordRound(s); return; }
-      apply(s, { reputation: -12, advisor: -8, health: -7 });
-      const questioned = s.papers.find(p => p.evidenceRisk > 0 && p.status !== 'withdrawn');
-      if (questioned) { questioned.status = 'withdrawn'; questioned.feedback = '规范调查期间撤回，相关成果积分取消。'; }
-      log(s, '学术规范质疑', '署名、引注或结论受到质疑，相关材料需要接受核查。问题记录将持续存在。', 'bad');
+    const unresolved = s.backlog.filter(item => item.createdTick < s.tick).length;
+    if (unresolved) {
+      const pressure = Math.min(3, unresolved);
+      apply(s, { health: -pressure, advisor: -pressure });
+      log(s, '遗留事项仍待跟进', `${unresolved} 件往期问题尚未处理，本期健康与关系各 -${pressure}。事项继续保留，可在书桌安排跟进或主动收束。`, 'event');
     }
+    if (s.risk > 0 && random(s) < Math.min(.18, s.risk / 400)) {
+      const questioned = s.papers.find(p => p.evidenceRisk >= 24 && p.status !== 'withdrawn');
+      apply(s, { reputation: questioned ? -8 : -4, advisor: -3, health: -2, risk: -18, ethics: 6 });
+      if (questioned) { questioned.status = 'withdrawn'; questioned.feedback = '问题稿件撤回补正，暂不计成果；核对材料后可以重投。'; }
+      log(s, '补充学术规范说明', `署名、引注或结论受到核查，需整理说明并承担少量声望与协调成本。${questioned ? '一份问题稿件撤回，可通过「核对与补正材料」重新整理。' : '现有成果保留，可继续补正材料。'}培养与聘期继续。`, 'bad');
+    }
+    apply(s, { risk: -6 });
     if (s.phase === 'faculty') {
       if (s.annual.teach) s.teachingYears++; else { apply(s,{ reputation: -6, advisor: -5, health: -3 }); log(s,'年度教学未达标','本年度没有完成基础教学，年度考核记一次缺项。','bad'); }
       if (s.year >= 2 && s.annual.supervise) s.studentYears++;
@@ -347,8 +393,10 @@
     if (s.phase === 'faculty') s.year++; else s.semester++;
     if (s.phase === 'phd' && s.semester > 8) { apply(s, { health: -3, advisor: -2 }); log(s,'进入延期培养','本局最长允许培养至第 12 学期。毕业条件不变，时间与心理成本增加。','bad'); }
     s.actions = s.phase === 'faculty' ? 6 : 4;
-    s.energy = Math.round(60 + s.health * .3); s.annual = {}; s.pending = false;
-    log(s, '新的' + (s.phase === 'faculty' ? '年度' : '学期'), `可分配 ${s.actions} 次行动。科研精力恢复至 ${s.energy}；未完成稿件与经费结转。`);
+    const previousEnergy = s.energy;
+    apply(s, { energy: Math.round((s.phase === 'faculty' ? 44 : 28) + s.health * .16) });
+    s.annual = {}; s.pending = false;
+    log(s, '新的' + (s.phase === 'faculty' ? '年度' : '学期'), `可分配 ${s.actions} 次行动。科研精力在原有 ${previousEnergy} 点上恢复 ${s.energy - previousEnergy} 点，现为 ${s.energy}。六项状态持续结转（状态上限 100，经费不设上限）；${s.backlog.length} 件遗留事项与未完成稿件继续保留。`);
     checkHealth(s);
     beginRound(s);
   }
@@ -360,26 +408,26 @@
       { id: 'employed', title: '企业就业', text: '把研究方法转化为专业岗位能力；进入独立结局。', enabled: true },
       { id: 'civil', title: '体制内行政', text: '投入招录与岗位考核准备；本局积累 ≥60 且人际协调经验充足时可获录用。', enabled: s.knowledge >= 60 && s.eq >= 40 }
     ];
-    const passed = requirements(s).every(r => r.value >= r.target) && s.ethics >= 60;
+    const passed = requirements(s).every(r => r.value >= r.target);
     return [
-      { id: 'tenure', title: '申请长聘副教授', text: '全部聘期指标达标，且科研规范记录通过核查。', enabled: passed },
-      { id: 'lecturer', title: '申请留校教学讲师', text: '本局有教学转聘名额：教学达标 ≥5 年，累计教学投入 ≥7，规范记录通过。', enabled: s.teachingYears >= 5 && s.teaching >= 7 && s.ethics >= 60 },
-      { id: 'admin', title: '竞聘行政岗位', text: '本局有转岗名额：人际协调经验较好，导师 / 同行好感 ≥55。', enabled: s.eq >= 52 && s.advisor >= 55 && s.ethics >= 60 },
-      { id: 'regional', title: '应聘地方本科高校', text: '聘期成果积分 ≥2，教学至少达标 3 年，规范记录通过。', enabled: points(s, true) >= 2 && s.teachingYears >= 3 && s.ethics >= 60 },
-      { id: 'industry', title: '接受业界高薪岗位', text: '学术积累 ≥70、声望 ≥40，凭方法与项目经验通过面试。', enabled: s.knowledge >= 70 && s.reputation >= 40 && s.ethics >= 60 },
+      { id: 'tenure', title: '申请长聘副教授', text: '全部聘期指标达标。规范问题通过具体返工与成果状态体现，不额外一票否决。', enabled: passed },
+      { id: 'lecturer', title: '申请留校教学讲师', text: '本局有教学转聘名额：教学达标 ≥5 年，累计教学投入 ≥7。', enabled: s.teachingYears >= 5 && s.teaching >= 7 },
+      { id: 'admin', title: '竞聘行政岗位', text: '本局有转岗名额：人际协调经验较好，导师 / 同行好感 ≥55。', enabled: s.eq >= 52 && s.advisor >= 55 },
+      { id: 'regional', title: '应聘地方本科高校', text: '聘期成果积分 ≥2，教学至少达标 3 年。', enabled: points(s, true) >= 2 && s.teachingYears >= 3 },
+      { id: 'industry', title: '接受业界高薪岗位', text: '学术积累 ≥70、声望 ≥40，凭方法与项目经验通过面试。', enabled: s.knowledge >= 70 && s.reputation >= 40 },
       { id: 'dismissed', title: '结束聘期，离开高校', text: '接受合同到期的结果，重新安排下一段职业生活。', enabled: true }
     ];
   }
   function chooseCareer(s, id) {
     const c = careerOptions(s).find(c=>c.id === id); if (!c || !c.enabled) return '尚未满足此去向的本局条件';
     if (id !== 'faculty') { end(s, id); return ''; }
-    s.phase = 'faculty'; s.year = 1; s.tick++; s.career = false; s.facultyBase = s.grants; s.actions = 6; s.annual = {}; s.energy = 90;
+    s.phase = 'faculty'; s.year = 1; s.tick++; s.career = false; s.facultyBase = s.grants; s.actions = 6; s.annual = {}; apply(s, { energy: 20 });
     s.funds += s.major === 'ee' ? 38 : s.major === 'cs' ? 22 : 15; s.health = clamp(s.health + 10);
-    log(s,'入职定岗 · 六年聘期开始','启动经费已拨入本局研究账户。博士阶段已录用论文不重复计入聘期；聘期内新录用成果按本局合同计入。每年别忘了教学与研究生指导。','good');
+    log(s,'入职定岗 · 六年聘期开始','六项状态、稿件和遗留事项从博士阶段延续。入职间歇精力 +20、健康 +10（上限 100），另拨启动经费。博士阶段已录用论文不重复计入聘期；接下来逐年模拟六年的研究、教学与学生指导。','good');
     beginRound(s);
     return '';
   }
   function withdraw(s) { if (!available(s) || s.phase !== 'phd') return '当前不能办理退学'; end(s,'dropout'); return ''; }
-  const api = { make, act, submit, revise, next, resolve, points, requirements, actionList, costs, time, affordability, strategies, careerOptions, chooseCareer, eventById, withdraw, targetKnowledge, topic, venue, focusOptions, setFocus, recommendation, previewPlan, executePlan, opportunities, pursueOpportunity, migrate };
+  const api = { make, act, submit, revise, next, resolve, resolveBacklog, backlogEffects, deferral, points, requirements, actionList, costs, time, affordability, strategies, careerOptions, chooseCareer, eventById, withdraw, targetKnowledge, topic, venue, focusOptions, setFocus, recommendation, previewPlan, executePlan, opportunities, pursueOpportunity, migrate };
   if (typeof module !== 'undefined') module.exports = api; else root.Game = api;
 })(typeof window !== 'undefined' ? window : globalThis);

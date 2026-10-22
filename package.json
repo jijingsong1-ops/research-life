@@ -1,7 +1,11 @@
 {
   "name": "research-life",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "科研人生：六专业博士到青椒文字模拟游戏",
-  "scripts": { "start": "node serve.cjs", "build": "node build.cjs", "test": "node --test tests.cjs ui-tests.cjs" }
+  "scripts": {
+    "start": "node serve.cjs",
+    "build": "node build.cjs",
+    "test": "node --test tests.cjs ui-tests.cjs"
+  }
 }
