@@ -1,0 +1,18 @@
+科研人生 v0.2 美术资产说明
+
+生成方式：OpenAI 内置 image_gen 工具。AI 生成的手绘风原画，不宣称为真人手绘作品。
+日期：2026-10-22
+统一风格：国内当代高校科研日常，水粉与水彩纸纹、细铅笔线稿，森林绿、鼠尾草绿、奶油纸白、秋日赭黄、少量陶土色。成年人的安静校园生活，不使用奇幻、像素风、动漫大眼人物或光滑 3D。
+
+campus-v2.png
+用途：欢迎页校园主视觉，16:9 横向；主体建筑偏右，左侧道路与树冠形成纵深。
+文件来源：内置生成图，原文件保留于 CODEX_HOME/generated_images；当前文件是项目内完整副本。
+最终提示词：
+Use case: illustration-story. Asset type: finished professional-quality game environment illustration for a Chinese academic-life text simulation. Generate a wide 16:9 landscape composition, artwork only, no UI or lettering. Scene: a believable contemporary university campus in mainland China in early autumn, low-rise brick and pale-plaster teaching/library building with large windows mostly on the right, mature camphor and golden ginkgo trees, a quiet paved path, a few tiny casually dressed graduate students and bicycles, no close-up faces. Style: sophisticated hand-painted editorial illustration, opaque gouache and delicate watercolor washes on visibly fine warm-cream paper, subtle graphite contours, confident organic brushwork, coherent architectural perspective, tactile foliage and natural irregular edges, not vector-flat and not photorealistic. Color palette: deep forest green, muted sage, warm cream, ochre gold, restrained terracotta. Afternoon sunlight, tranquil and grounded, adult and thoughtful rather than childish. Use attractive detailed painting and gentle depth; keep right two-thirds as main architectural composition and left third quieter with pale atmospheric trees and open path, suitable for placing a title beside the image. No fantasy, no European castle, no foreign flags, no dramatic cinematic effects, no glossy 3D, no anime, no pixel art, no watermark, no logo, absolutely no readable text.
+
+study-v2.png
+用途：学期总览书桌场景；16:9 横向，可在 UI 中用 object-fit 裁取右侧书桌与窗景。左侧墙面较疏，适合文字覆盖。
+最终提示词：
+Use case: illustration-story. Asset type: finished professional hand-painted environment artwork for the dashboard of a realistic Chinese academic-life text simulation. Generate wide landscape 16:9, no typography or UI. A quiet graduate student's real study desk next to a large window in a contemporary mainland Chinese university: several worn notebooks and open manuscripts without readable letters, a plain muted-green desk lamp, an open laptop with faint unrecognizable diagrams rather than text, a ceramic mug, one small potted plant, pencils. Outside on the RIGHT are the warm autumn ginkgo trees and distant brick-and-plaster university library, soft afternoon light. The left one-third should be mostly light warm-cream wall and softly lit uncluttered desktop, genuinely low detail to allow dark UI text overlay. Keep the focal tabletop objects in the middle horizontal band so this artwork can be cropped to a wide 3:1 strip without losing the essential research mood; laptop and window primarily in right half. Sophisticated editorial illustration, refined opaque gouache and delicate watercolor washes on fine textured ivory paper, thin graphite linework, confident organic brushstrokes, tangible wood and paper, carefully coherent spatial perspective. Adult and grounded, quiet daily effort rather than cute fantasy. Palette deep forest green, muted sage, warm cream, ochre gold, restrained warm wood and terracotta, matching an illustrated autumn Chinese campus scene. Full-bleed artwork, not a collage. No readable words in any language, no signage, no logo, no watermark, no characters or visible faces, no science fiction, no pixel art, no vector-flat rendering, no 3D render, no photorealism.
+
+使用约束：图片无外部字体依赖。UI 文案应使用 HTML，不把生成图中的微小图形当作真实论文或真实数据。不要把这些绘画描述为科研工作的真实照片。
